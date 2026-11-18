@@ -1,0 +1,18 @@
+[Unit]
+Description=Keep trusted Bluetooth mice and keyboards connected (Macs with unpatched Broadcom UART Bluetooth)
+Documentation=https://github.com/hlang98923/mac-bt-hid-reconnect
+After=bluetooth.service
+Wants=bluetooth.service
+# Never give up restarting, however often the loop exits
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bt-hid-reconnect
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=bluetooth.target
