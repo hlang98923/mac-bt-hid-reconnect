@@ -21,11 +21,11 @@ Linux has no patch firmware for this chip (on the iMac19,1, a BCM4364B0 that rep
 
 ## What this does
 
-A small loop (`bt-hid-reconnect`, run by systemd) does this every 2 seconds:
+A small loop (`bt-hid-reconnect`, run by systemd) sleeps until udev reports an input device removed, an rfkill switch changed, or a Bluetooth device event, with a safety wake every 60 seconds. While everything is connected it does nothing else. When it wakes:
 
 1. It lists paired devices that are **trusted**, **not blocked**, and offer HID: HID over GATT (`0x1812`) or classic HID (`0x1124`).
 2. For each one, it checks whether the kernel has an input device for it. It matches on the device's Bluetooth address (the input device's `Uniq`), not on its name. The kernel names a Logitech mouse either `MX Master 3S` or `Logitech MX Master 3S` depending on timing, and matching on the name tears down working links.
-3. If the device is missing, it opens a targeted connect with an LE scan running alongside it. Scanning only happens while a device is missing.
+3. If the device is missing, it opens a targeted connect with an LE scan running alongside it, and keeps retrying until the device is back. Scanning only happens while a device is missing.
 4. If BlueZ says `Connected: yes` but there is still no input device after 20 seconds, it drops the stale link and connects again.
 5. If connects keep failing with `InProgress`, it power-cycles the adapter once. That is the only thing that clears this BlueZ state.
 
@@ -57,7 +57,7 @@ To stop it reconnecting one particular device, untrust that device: `bluetoothct
 
 ## What it can't fix
 
-- **It recovers from drops; it doesn't prevent them.** The chip still runs without firmware, so links still drop. Most devices only advertise when touched, so after a drop the device comes back when you move or click it, usually within a second or two.
+- **It recovers from drops; it doesn't prevent them.** The chip still runs without firmware, so links still drop. On the test iMac, BlueZ reported the MX Master's drops as `org.bluez.Reason.Remote`: the mouse itself ends the link, and a normal controller would reconnect it the moment it wakes. Here the device comes back when you move or click it, in 1 to 17 seconds in testing. You can watch the reasons without root: `gdbus monitor --system --dest org.bluez | grep Disconnected`.
 - **It scans while a device is missing.** If a trusted mouse stays switched off for hours, the loop scans that whole time. Bluetooth and Wi-Fi share one chip, so this might cost some Wi-Fi throughput. Untrust devices you leave off.
 - **The real fix is firmware plus driver work.** macOS ships this chip's patch as Intel HEX (`/usr/share/firmware/bluetooth/BCM4364B0-*.hex`). [MrHogun/imac-a2115-linux](https://github.com/MrHogun/imac-a2115-linux#bluetooth--not-solved) converted it to `.hcd`: the chip accepts the patch and then stops answering (`failed to write update baudrate (-110)`), because `hci_uart_bcm` can't follow the UART speed change on this machine. Until that driver work is done, this loop is the practical fix.
 
